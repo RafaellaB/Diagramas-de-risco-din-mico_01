@@ -17,6 +17,14 @@ jobs:
       - name: Checkout do Repositório de Origem
         uses: actions/checkout@v4
         
+      # --- PASSO NOVO: CONFIGURAÇÃO DE CREDENCIAIS GLOBAIS ---
+      - name: Configurar Credenciais de Push (Token de Destino)
+        run: |
+          # Define o domínio do GitHub para usar o Token como credencial HTTP
+          git config --global url."https://${{ secrets.REPO_DESTINO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global user.name 'GitHub Actions Bot'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
       - name: Configurar Python e Instalar dependências (Completo)
         uses: actions/setup-python@v5
         with:
@@ -26,32 +34,23 @@ jobs:
       - name: ⚙️ Executar 'calcular_risco_cli.py' (Calcula e incrementa o histórico)
         run: python calcular_risco_cli.py
         
-      # --- PASSO 3: ENVIO DE DADOS PARA REPOSITÓRIO DE DESTINO (CORREÇÃO DE AUTENTICAÇÃO) ---
+      # --- PASSO FINAL: ENVIO DE DADOS PARA REPOSITÓRIO DE DESTINO ---
       - name: 🚀 Enviar 'resultado_risco_final.csv' para o Repositório do Painel
         run: |
-          # Configura as credenciais globais para o Git usar o Token para o domínio do GitHub
-          git config --global user.name 'GitHub Actions Bot'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
           DEST_REPO="RafaellaB/Painel-Diagrama-de-Risco"
           DEST_BRANCH="main"
           DEST_DIR="destino_repo"
           
-          # ** LINHA CHAVE DE AUTENTICAÇÃO **: Injeta o token para uso em qualquer URL do GitHub.
-          git config --global url."https://${{ secrets.REPO_DESTINO_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
-          # Clona o repositório de destino usando a configuração de autenticação
+          # Clona o repositório de destino (a autenticação já está configurada no passo anterior)
           git clone --single-branch --branch ${DEST_BRANCH} https://github.com/${DEST_REPO}.git ${DEST_DIR}
           cd ${DEST_DIR}
 
-          # Copia o arquivo gerado da raiz do repositório de origem para o repositório clonado
+          # Copia o arquivo gerado da raiz
           cp ../resultado_risco_final.csv .
 
           # Faz o commit e push
           git add resultado_risco_final.csv
           
-          # Se não houver alteração (para o caso de o script ter rodado mais de uma vez com o mesmo dado), ele não falha.
+          # Commit e Push (o token é lido da configuração global)
           git commit -m "Incremento diário de risco: Adicionado dado do dia que encerrou." || exit 0
-          
-          # O push usa o token configurado globalmente
           git push origin ${DEST_BRANCH}
