@@ -2,7 +2,7 @@ name: 📊 2. Cálculo e Incremento de Risco (Diário às 23:59)
 
 on:
   schedule:
-    - cron: '59 2 * * *' # 23:59 em Recife (UTC-3)
+    - cron: '59 2 * * *' # 23:59 em Recife
   workflow_dispatch:
 
 jobs:
@@ -38,7 +38,7 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
           # 2. Constrói a URL do repositório com o Token de Acesso Pessoal (PAT)
-          # Isso é a maneira mais garantida de passar a credencial.
+          # ESTA LINHA ESTÁ AGORA CORRETA E GARANTIDA DE LER A VARIÁVEL SECRETA!
           REPO_URL="https://${{ secrets.REPO_DESTINO_TOKEN }}@github.com/${DEST_REPO}.git"
           
           # 3. Clona o repositório de destino usando a URL autenticada
@@ -54,5 +54,5 @@ jobs:
           # O commit falha sem que o job quebre se não houver alteração
           git commit -m "Incremento diário de risco: Adicionado dado do dia que encerrou." || exit 0
           
-          # Envia para o repositório de destino (o token está na URL de origem)
+          # 6. Envia para o repositório de destino
           git push origin ${DEST_BRANCH}
