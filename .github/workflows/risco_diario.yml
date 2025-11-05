@@ -1,10 +1,33 @@
-# ... (passos anteriores) ...
+name: 📊 2. Cálculo e Incremento de Risco (Diário às 23:59)
 
+on:
+  schedule:
+    - cron: '59 2 * * *' # 23:59 em Recife (UTC-3)
+  workflow_dispatch:
+
+jobs:
+  pipeline_risco_diario:
+    runs-on: ubuntu-latest
+    
+    env:
+      CEMADEN_EMAIL: ${{ secrets.CEMADEN_EMAIL }}
+      CEMADEN_SENHA: ${{ secrets.CEMADEN_SENHA }}
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+        
+      - name: Configurar Python e Instalar dependências (Completo)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install requests pandas pytz numpy 
+        
       - name: ⚙️ Executar 'calcular_risco_cli.py' (Calcula e incrementa o histórico)
+        # O script de risco lê o arquivo de chuva que o JOB 1 salvou no último ciclo.
         run: python calcular_risco_cli.py
         
-      # --- ETAPA 3: CORREÇÃO E ENVIO DO HISTÓRICO AGREGADO PARA O PAINEL ---
-      # Usaremos o step-by-step de GIT para garantir o commit do arquivo ÚNICO.
+      # --- PASSO NOVO: ENVIO USANDO COMANDOS GIT PUROS ---
       - name: 🚀 Enviar 'resultado_risco_final.csv' para o Repositório do Painel
         run: |
           # 1. Configura as credenciais (usando o token de destino)
@@ -12,7 +35,6 @@
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
           # 2. Clona o repositório de destino para uma subpasta temporária (usando o PAT)
-          # NOTA: O token REPO_DESTINO_TOKEN DEVE ser passado diretamente na URL para autenticação
           DEST_REPO="RafaellaB/Painel-Diagrama-de-Risco"
           DEST_BRANCH="main"
           
@@ -24,12 +46,11 @@
           cd destino_repo
           
           # 3. Copia o arquivo gerado (risco_final.csv) para o repositório clonado
-          # O arquivo foi gerado na raiz do repositório original.
           cp ../resultado_risco_final.csv .
           
           # 4. Faz o commit e push
           git add resultado_risco_final.csv
           
-          # A opção '|| exit 0' permite que o job continue se não houver alterações (sem commit)
+          # Permite que o push falhe sem quebrar o job se não houver alteração (|| exit 0)
           git commit -m "Incremento diário de risco: Adicionado dado do dia que encerrou." || exit 0
           git push origin ${DEST_BRANCH}
