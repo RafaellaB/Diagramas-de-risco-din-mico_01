@@ -16,12 +16,15 @@ jobs:
     steps:
       - name: Checkout do Repositório
         uses: actions/checkout@v4
-      - name: Configurar Python e Instalar dependências
+        
+      - name: 1. Configurar Ambiente Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      # LINHA CORRIGIDA PARA INCLUIR TODAS AS DEPENDÊNCIAS DO atualizar_dados.py
-      - run: pip install requests pandas pytz 
+          
+      - name: 2. Instalar Módulos Necessários (requests, pandas, pytz)
+       
+        run: python -m pip install requests pandas pytz
 
       - name: Rodar script de atualização de dados
         run: python atualizar_dados.py

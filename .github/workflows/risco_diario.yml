@@ -1,8 +1,8 @@
-name: 📊 2. Cálculo e Incremento de Risco (Diário às 23:59)
+name: 📊 2. Cálculo e Incremento de Risco (Diário)
 
 on:
   schedule:
-    - cron: '59 2 * * *' # 23:59 em Recife
+    - cron: '15 3 * * *' # 
   workflow_dispatch:
 
 jobs:
