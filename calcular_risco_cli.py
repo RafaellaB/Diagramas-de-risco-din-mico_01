@@ -4,25 +4,17 @@ import sys
 import requests
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, date, timedelta # Importamos timedelta
 from pytz import timezone
 
-# --- 1. CONFIGURAÇÕES FIXAS (Ajuste a URL do histórico) ---
-
-# URL direta para o arquivo do histórico no repositório de destino (Painel-Diagrama-de-Risco)
-# *** SUBSTITUA 'NOME_DO_DONO' PELO SEU NOME/ORGANIZAÇÃO DO GITHUB ***
+# --- 1. CONFIGURAÇÕES FIXAS ---
 URL_ARQUIVO_HISTORICO = 'https://raw.githubusercontent.com/RafaellaB/Painel-Diagrama-de-Risco/main/resultado_risco_final.csv'
-
-# URL para os dados de maré que você usa (mantida de conversas anteriores)
 URL_ARQUIVO_MARE_AM = 'https://raw.githubusercontent.com/RafaellaB/Diagramas-de-risco-din-mico/main/tide/mare_calculada_hora_em_hora_ano-completo.csv'
-
-# Nomes de arquivos
 NOME_ARQUIVO_SAIDA_FINAL = 'resultado_risco_final.csv'
 CSV_DELIMITADOR = ',' 
 ESTACOES_DESEJADAS = ["Campina do Barreto", "Torreão", "RECIFE - APAC", "Imbiribeira", "Dois Irmãos"]
 
-# --- 2. FUNÇÕES DE CÁLCULO (Adaptadas do seu Streamlit) ---
-
+# --- 2. FUNÇÕES DE CÁLCULO (INALTERADAS) ---
 def carregar_dados_mare(url_am_data):
     """ Carrega o arquivo de maré (AM) ANUAL. """
     try:
@@ -58,7 +50,6 @@ def processar_dados_chuva_simplificado(df_chuva, datas_desejadas, estacoes_desej
     df_vp['hora_ref'] = df_vp['datahora'].dt.strftime('%H:00:00')
     return df_vp[['data', 'hora_ref', 'nomeEstacao', 'VP']]
 
-
 def calcular_risco(df_final):
     """ Calcula o Nível de Risco (VP * AM) e a Classificação. """
     if df_final.empty: return pd.DataFrame()
@@ -70,7 +61,6 @@ def calcular_risco(df_final):
     df_final['Classificacao_Risco'] = pd.cut(df_final['Nivel_Risco_Valor'], bins=bins, labels=labels, right=False)
     return df_final
 
-
 def executar_analise_risco_completa(df_vp_calculado, df_am):
     """ Mescla VP e AM e chama o cálculo de risco. """
     if df_vp_calculado.empty: return pd.DataFrame()
@@ -78,24 +68,24 @@ def executar_analise_risco_completa(df_vp_calculado, df_am):
     df_risco = calcular_risco(df_final)
     return df_risco
 
-
 # --- 3. INÍCIO DO BLOCO PRINCIPAL (Lógica de Incremento) ---
 if __name__ == "__main__":
     
     # 3.1. Definição da Data e Nomes de Arquivos
     tz_recife = timezone('America/Recife') 
-    # Usamos o dia anterior, pois a Action roda às 23:59 (fim do dia)
-    data_hoje = datetime.now(tz_recife).date()
-    data_hoje_str = data_hoje.strftime('%Y-%m-%d')
     
-    # Arquivo de entrada (gerado pelo atualizar_dados.py)
-    nome_arquivo_chuva = f"chuva_recife_{data_hoje_str}.csv"
+    # O Job roda no final do dia (Dia D), mas processa o dia anterior (Dia D-1), que está completo.
+    data_para_processar = datetime.now(tz_recife).date() - timedelta(days=1)
+    data_para_processar_str = data_para_processar.strftime('%Y-%m-%d')
     
-    print(f"Iniciando cálculo de risco para a data: {data_hoje_str}")
+    # Arquivo de entrada (será o arquivo COMPLETO de ONTEM)
+    nome_arquivo_chuva = f"chuva_recife_{data_para_processar_str}.csv"
+    
+    print(f"Iniciando cálculo de risco para a data: {data_para_processar_str}")
     
     if not os.path.exists(nome_arquivo_chuva):
-        print(f"❌ ERRO: Arquivo de chuva '{nome_arquivo_chuva}' não foi encontrado. Execute 'atualizar_dados.py' primeiro.", file=sys.stderr)
-        sys.exit(1)
+        print(f"❌ ERRO: Arquivo de chuva '{nome_arquivo_chuva}' não foi encontrado. O Job de 5min pode ter falhado.", file=sys.stderr)
+        sys.exit(1) # Sai com erro se o arquivo de ontem não existir
 
     try:
         # Carrega dados
@@ -105,7 +95,7 @@ if __name__ == "__main__":
         df_chuva_raw['datahora'] = pd.to_datetime(df_chuva_raw['datahora']) 
         
         # Calcula Risco
-        df_vp_calculado = processar_dados_chuva_simplificado(df_chuva_raw, [data_hoje_str], ESTACOES_DESEJADAS)
+        df_vp_calculado = processar_dados_chuva_simplificado(df_chuva_raw, [data_para_processar_str], ESTACOES_DESEJADAS)
         df_risco_final = executar_analise_risco_completa(df_vp_calculado, df_am)
         
         if df_risco_final.empty:
@@ -114,25 +104,30 @@ if __name__ == "__main__":
 
         # 3.2. Prepara o dado do dia para incremento
         colunas_saida = ['data', 'hora_ref', 'nomeEstacao', 'VP', 'AM', 'Nivel_Risco_Valor', 'Classificacao_Risco']
-        df_novo_dia = df_risco_final[colunas_saida]
         
+        # <<<--- CORREÇÃO CRÍTICA APLICADA AQUI (usando .copy() para evitar o erro de referência) ---<<<
+        df_novo_dia = df_risco_final[colunas_saida].copy() 
+        
+        # Garante que a data na linha de saída seja a data do arquivo processado (Ontem)
+        # ISTO CORRIGE O PROBLEMA DO TIMESTAMP PULAR PARA O DIA ATUAL (09/Nov)
+        df_novo_dia['data'] = data_para_processar_str
+        # ------------------------------------------------------------------------------------------
+
         # 3.3. Baixar o arquivo de histórico existente
         df_historico_existente = pd.DataFrame(columns=colunas_saida)
         
         try:
-            # Tenta baixar o histórico do repositório de destino
             response = requests.get(URL_ARQUIVO_HISTORICO)
-            response.raise_for_status() # Lança exceção para status 4xx/5xx
+            response.raise_for_status() 
             from io import StringIO
             df_historico_existente = pd.read_csv(StringIO(response.text))
             df_historico_existente = df_historico_existente[colunas_saida] 
             print(f"✅ Histórico existente baixado com {len(df_historico_existente)} linhas.")
         except requests.exceptions.HTTPError as http_err:
-            # Erro 404 (Not Found) é esperado na primeira execução, se o arquivo não existe
             if response.status_code == 404:
-                 print("⚠️ Aviso: Arquivo de histórico (resultado_risco_final.csv) não encontrado no destino. Será criado um novo.")
+                print("⚠️ Aviso: Arquivo de histórico (resultado_risco_final.csv) não encontrado no destino. Será criado um novo.")
             else:
-                 print(f"❌ ERRO HTTP ao baixar histórico: {http_err}", file=sys.stderr)
+                print(f"❌ ERRO HTTP ao baixar histórico: {http_err}", file=sys.stderr)
         except Exception as e:
             print(f"❌ ERRO fatal ao processar o histórico: {e}", file=sys.stderr)
             sys.exit(1)
@@ -140,8 +135,6 @@ if __name__ == "__main__":
         # 3.4. Concatenar (INCREMENTAR) e Limpar
         df_historico_final = pd.concat([df_historico_existente, df_novo_dia], ignore_index=True)
         
-        # Remove duplicatas (linhas com a mesma data/hora/estação)
-        # Manter 'last' garante que o dado mais recente (o que acabamos de calcular) prevaleça
         df_historico_final.drop_duplicates(subset=['data', 'hora_ref', 'nomeEstacao'], keep='last', inplace=True)
         
         # 3.5. Salvar o arquivo COMPLETO para ser enviado
