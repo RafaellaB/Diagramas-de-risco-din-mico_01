@@ -7,14 +7,14 @@ import numpy as np
 from datetime import datetime, date, timedelta # Importamos timedelta
 from pytz import timezone
 
-# --- 1. CONFIGURAÇÕES FIXAS ---
+
 URL_ARQUIVO_HISTORICO = 'https://raw.githubusercontent.com/RafaellaB/Painel-Diagrama-de-Risco/main/resultado_risco_final.csv'
 URL_ARQUIVO_MARE_AM = 'https://raw.githubusercontent.com/RafaellaB/Diagramas-de-risco-din-mico/main/tide/mare_calculada_hora_em_hora_ano-completo.csv'
 NOME_ARQUIVO_SAIDA_FINAL = 'resultado_risco_final.csv'
 CSV_DELIMITADOR = ',' 
 ESTACOES_DESEJADAS = ["Campina do Barreto", "Torreão", "RECIFE - APAC", "Imbiribeira", "Dois Irmãos"]
 
-# --- 2. FUNÇÕES DE CÁLCULO (INALTERADAS) ---
+
 def carregar_dados_mare(url_am_data):
     """ Carrega o arquivo de maré (AM) ANUAL. """
     try:
@@ -68,33 +68,30 @@ def executar_analise_risco_completa(df_vp_calculado, df_am):
     df_risco = calcular_risco(df_final)
     return df_risco
 
-# --- 3. INÍCIO DO BLOCO PRINCIPAL (Lógica de Incremento) ---
 if __name__ == "__main__":
     
-    # 3.1. Definição da Data e Nomes de Arquivos
+ 
     tz_recife = timezone('America/Recife') 
-    
-    # O Job roda no final do dia (Dia D), mas processa o dia anterior (Dia D-1), que está completo.
+   
     data_para_processar = datetime.now(tz_recife).date() - timedelta(days=1)
     data_para_processar_str = data_para_processar.strftime('%Y-%m-%d')
     
-    # Arquivo de entrada (será o arquivo COMPLETO de ONTEM)
+ 
     nome_arquivo_chuva = f"chuva_recife_{data_para_processar_str}.csv"
     
     print(f"Iniciando cálculo de risco para a data: {data_para_processar_str}")
     
     if not os.path.exists(nome_arquivo_chuva):
         print(f"❌ ERRO: Arquivo de chuva '{nome_arquivo_chuva}' não foi encontrado. O Job de 5min pode ter falhado.", file=sys.stderr)
-        sys.exit(1) # Sai com erro se o arquivo de ontem não existir
-
+        sys.exit(1) 
     try:
-        # Carrega dados
+       
         df_am = carregar_dados_mare(URL_ARQUIVO_MARE_AM)
         df_chuva_raw = pd.read_csv(nome_arquivo_chuva, sep=CSV_DELIMITADOR)
         df_chuva_raw.rename(columns={'nome': 'nomeEstacao', 'valor': 'valorMedida'}, inplace=True)
         df_chuva_raw['datahora'] = pd.to_datetime(df_chuva_raw['datahora']) 
         
-        # Calcula Risco
+        
         df_vp_calculado = processar_dados_chuva_simplificado(df_chuva_raw, [data_para_processar_str], ESTACOES_DESEJADAS)
         df_risco_final = executar_analise_risco_completa(df_vp_calculado, df_am)
         
@@ -102,18 +99,17 @@ if __name__ == "__main__":
             print("⚠️ Aviso: Cálculo de risco do dia resultou em DataFrame vazio.", file=sys.stderr)
             sys.exit(0)
 
-        # 3.2. Prepara o dado do dia para incremento
+       
         colunas_saida = ['data', 'hora_ref', 'nomeEstacao', 'VP', 'AM', 'Nivel_Risco_Valor', 'Classificacao_Risco']
         
-        # <<<--- CORREÇÃO CRÍTICA APLICADA AQUI (usando .copy() para evitar o erro de referência) ---<<<
+       
         df_novo_dia = df_risco_final[colunas_saida].copy() 
         
-        # Garante que a data na linha de saída seja a data do arquivo processado (Ontem)
-        # ISTO CORRIGE O PROBLEMA DO TIMESTAMP PULAR PARA O DIA ATUAL (09/Nov)
+       
         df_novo_dia['data'] = data_para_processar_str
-        # ------------------------------------------------------------------------------------------
+        
 
-        # 3.3. Baixar o arquivo de histórico existente
+    
         df_historico_existente = pd.DataFrame(columns=colunas_saida)
         
         try:
@@ -132,12 +128,12 @@ if __name__ == "__main__":
             print(f"❌ ERRO fatal ao processar o histórico: {e}", file=sys.stderr)
             sys.exit(1)
 
-        # 3.4. Concatenar (INCREMENTAR) e Limpar
+      
         df_historico_final = pd.concat([df_historico_existente, df_novo_dia], ignore_index=True)
         
         df_historico_final.drop_duplicates(subset=['data', 'hora_ref', 'nomeEstacao'], keep='last', inplace=True)
         
-        # 3.5. Salvar o arquivo COMPLETO para ser enviado
+       
         df_historico_final.to_csv(NOME_ARQUIVO_SAIDA_FINAL, index=False)
         print(f"✅ Sucesso! Arquivo de histórico '{NOME_ARQUIVO_SAIDA_FINAL}' (com {len(df_historico_final)} linhas) gerado para envio.")
 
