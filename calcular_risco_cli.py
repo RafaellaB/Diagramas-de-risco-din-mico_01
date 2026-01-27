@@ -16,17 +16,26 @@ ESTACOES_DESEJADAS = ["Campina do Barreto", "Torreão", "RECIFE - APAC", "Imbiri
 
 
 def carregar_dados_mare(url_am_data):
-    """ Carrega o arquivo de maré (AM) ANUAL. """
+    """ Carrega o arquivo de maré (AM) ANUAL corrigindo o mapeamento de colunas. """
     try:
-        df_am_raw = pd.read_csv(url_am_data)
-        df_am_raw.rename(columns={'datahora': 'datahora', 'altura': 'AM'}, inplace=True)
+        
+        df_am_raw = pd.read_csv(url_am_data, sep=';', decimal=',')
+        
+        
+        df_am_raw.rename(columns={'Hora_Exata': 'datahora', 'Altura_m': 'AM'}, inplace=True)
+        
+        
+        if 'datahora' not in df_am_raw.columns:
+            raise KeyError("Coluna 'Hora_Exata' não encontrada no arquivo de maré.")
+
         df_am_raw['datahora'] = pd.to_datetime(df_am_raw['datahora'])
         df_am_raw['data'] = df_am_raw['datahora'].dt.strftime('%Y-%m-%d')
         df_am_raw['hora_ref'] = df_am_raw['datahora'].dt.strftime('%H:00:00')
+        
         return df_am_raw[['data', 'hora_ref', 'AM']]
     except Exception as e:
         print(f"ERRO: Falha ao carregar dados de maré: {e}", file=sys.stderr)
-        return pd.DataFrame()
+        return pd.DataFrame())
 
 def processar_dados_chuva_simplificado(df_chuva, datas_desejadas, estacoes_desejadas):
     """ Calcula o indicador horário de chuva 'VP'. """
