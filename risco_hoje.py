@@ -13,7 +13,7 @@ URL_ARQUIVO_MARE_AM = 'https://raw.githubusercontent.com/RafaellaB/Diagramas-de-
 CSV_DELIMITADOR = ',' 
 COLUNAS_NO_CSV_CHUVAS = ['datahora', 'nome', 'valor'] 
 COLUNAS_ESPERADAS_VP = ['datahora', 'nomeEstacao', 'valorMedida'] 
-# ==============================================================================
+
 
 
 # 2. funções cache para melhorar a performance  
@@ -21,23 +21,22 @@ COLUNAS_ESPERADAS_VP = ['datahora', 'nomeEstacao', 'valorMedida']
 
 @st.cache_data(show_spinner=False)
 def carregar_dados_mare_cache(url_am_data):
-    """ Carrega o maré (AM) detectando automaticamente o separador e limpando resíduos. """
     try:
-        # 1. Busca o conteúdo bruto para análise
         response = requests.get(url_am_data)
-        if response.status_code != 200:
-            st.error(f"Erro ao baixar maré: Status {response.status_code}")
-            return pd.DataFrame()
+        if response.status_code != 200: return pd.DataFrame()
         
-        conteudo = response.text
-        primeira_linha = conteudo.split('\n')[0]
+        # ESTA LINHA É A PROTEÇÃO contra o erro de tokenização:
+        linhas = [l for l in response.text.splitlines() if not l.startswith(('<<<<', '====', '>>>>')) and l.strip()]
         
-        # Detecta separador baseado na primeira linha (vírgula ou ponto e vírgula)
-        separador = ';' if ';' in primeira_linha else ','
+        if not linhas: return pd.DataFrame()
+
+        conteudo_limpo = "\n".join(linhas)
+        # O separador é detectado da linha limpa (cabeçalho real)
+        separador = ';' if ';' in linhas[0] else ','
         
-        # 2. Lê o CSV com o separador detectado
         from io import StringIO
-        df = pd.read_csv(StringIO(conteudo), sep=separador, decimal=',', encoding='utf-8')
+        df = pd.read_csv(StringIO(conteudo_limpo), sep=separador, decimal=',', encoding='utf-8')
+       
         
         # 3. Mapeamento flexível de colunas
         mapeamento = {
@@ -49,7 +48,7 @@ def carregar_dados_mare_cache(url_am_data):
         }
         df = df.rename(columns=mapeamento)
 
-        # Caso especial: Se as colunas ainda estiverem grudadas por erro de leitura
+        #caso especial: Se as colunas ainda estiverem grudadas por erro de leitura
         if len(df.columns) == 1:
             col_nome = df.columns[0]
             if ';' in col_nome or ',' in col_nome:
@@ -58,17 +57,17 @@ def carregar_dados_mare_cache(url_am_data):
                 df['datahora'] = temp[0]
                 df['AM'] = temp[1]
 
-        # 4. Limpeza de resíduos (remove ';0' ou ',0' que tenha ficado na data)
+        #4. limpeza (remove ';0' ou ',0' que tenha ficado na data)
         df['datahora'] = df['datahora'].astype(str).str.split(';').str[0].str.split(',').str[0]
         
-        # Conversão final
+        #conversão final
         df['datahora'] = pd.to_datetime(df['datahora'], errors='coerce')
         df = df.dropna(subset=['datahora'])
         
         df['data'] = df['datahora'].dt.strftime('%Y-%m-%d')
         df['hora_ref'] = df['datahora'].dt.strftime('%H:00:00')
         
-        # Garante que AM seja número (converte vírgula para ponto se necessário)
+        #garante que AM seja número (converte vírgula para ponto se necessário)
         df['AM'] = pd.to_numeric(df['AM'].astype(str).str.replace(',', '.'), errors='coerce')
         
         return df[['data', 'hora_ref', 'AM']]
@@ -78,7 +77,7 @@ def carregar_dados_mare_cache(url_am_data):
 
 @st.cache_data(ttl=300, show_spinner=False) # TTL = 300 segundos (5 minutos)
 def carregar_dados_chuva_cache(url_base, data_de_hoje_str, separador, colunas_csv):
-    """ Lê o arquivo de chuva do dia atual. Cache expira a cada 5 minutos. """
+    #Lê o arquivo de chuva do dia atual. Cache expira a cada 5 minutos.
     url_completa = f"{url_base}{data_de_hoje_str}{SUFIXO_ARQUIVO_CHUVAS}"
     
     try:
@@ -98,7 +97,7 @@ def carregar_dados_chuva_cache(url_base, data_de_hoje_str, separador, colunas_cs
         return pd.DataFrame()
 
 
-# 3. funções de processamento
+#3. funções de processamento
 
 def processar_dados_chuva_simplificado(df_chuva, datas_desejadas, estacoes_desejadas):
     """ Calcula o indicador horário de chuva 'VP'. """
@@ -191,7 +190,7 @@ def gerar_diagramas(df_analisado):
 
 if __name__ == "__main__":
     
-    # Define a data de hoje (America/Recife)
+    #define a data de hoje (America/Recife)
     fuso_horario_referencia = pytz.timezone('America/Recife') 
     data_hoje = datetime.now(fuso_horario_referencia).date()
     data_hoje_str = data_hoje.strftime('%Y-%m-%d')
@@ -234,11 +233,11 @@ if __name__ == "__main__":
     #botão de refresh e status
     col1, col2 = st.columns([1, 4])
     
-    # O botão de atualização, agora garantindo a limpeza
+    #botão de atualização, agora garantindo a limpeza
     if col1.button("Atualizar Dados"):
-        # Limpa o cache da função de chuva
+        #limpa o cache da função de chuva
         carregar_dados_chuva_cache.clear()
-        # Força o Streamlit a reexecutar o script a partir do topo
+        #força o Streamlit a reexecutar o script a partir do topo
         st.rerun() 
         
 
