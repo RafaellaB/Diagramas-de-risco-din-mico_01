@@ -1,4 +1,4 @@
-import pandas as pd
+""" import pandas as pd
 import requests
 import numpy as np
 from datetime import datetime, date
@@ -280,4 +280,4 @@ if __name__ == "__main__":
                  st.dataframe(df_risco_final[['data', 'hora_ref', 'nomeEstacao', 'VP', 'AM', 'Nivel_Risco_Valor', 'Classificacao_Risco']])
 
         else:
-            st.error("O cálculo de risco final falhou. Verifique as colunas de merge.")
+            st.error("O cálculo de risco final falhou. Verifique as colunas de merge.")"""
